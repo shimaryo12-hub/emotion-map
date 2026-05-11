@@ -1,18 +1,95 @@
-# React + Vite
+# 感情マップについて
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+感情を表す絵文字をコメントと共に地図上に表示させるマップのこと
 
-Currently, two official plugins are available:
+## アプリの目的
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+現在、住民参加型のまちづくりが求められており、従来のアンケートやヒアリングに加えて、市民のリアルタイムの感情や声を反映する新しい手法が注目されている。
 
-## React Compiler
+市民や若者のポジティブ、ネガティブな感情を地理情報と連携させ、行政の問題点を透視化する。
 
-The React Compiler is enabled on this template. See [this documentation](https://react.dev/learn/react-compiler) for more information.
+## セットアップ 
 
-Note: This will impact Vite dev & build performances.
+開発するうえでのセットアップ方法
 
-## Expanding the ESLint configuration
+1. miseのインストール
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+mise とは環境構築とタスクを実行するためのツールです。同じツールを同じバージョンでそろえるために使います。windows, mac, linuxで同じように動作し、今回のケースでは最善であると判断したので使います。
+
+[miseのインストールページ](https://mise.jdx.dev/getting-started.html)
+
+miseが正しくインストールされていて使える状態かは以下のコマンドで確認することができます。
+
+```sh
+mise doctor
+```
+
+またmiseで使用するツールをインストールするのは以下のコマンドで行えます
+
+```sh
+mise install
+```
+
+2. firebaseのセットアップ
+
+開発のみであればエミュレーターを使用して行えるので問題ないですが、firebaseのセットアップ方法を書いておきます
+
+ここではすでにfirebaseのプロジェクトを作成してfirestoreを有効化しているのを前提とします。
+
+以下のコマンドでfirebaseへのcliでのログインを行えます。
+
+```sh
+firebase login
+```
+
+そして、以下のコマンドを使うことであなたのfirebaseのプロジェクトとこのプロジェクトを紐図けることができます。
+これを行う場合は`src`内の`firebase.js`の内容を変更してください
+
+```sh
+firebase use --add
+```
+
+ailasの追加を求められたらこのfirebaseのプロジェクトをなんと呼びたいかを適当に追加してください。これはあなたのフォルダ内でしか影響は出ないので本当に適当でかまいません。すでに`firebase init`を実行したことがあれば飛ばしてかまいません。
+
+3. Google Maps APIについて
+
+このプロジェクトではGoogle Maps APIを利用して地図データの取得を行います。そのため、Goolge Map APIを取得しておく必要があります。
+
+https://www.google-mapi.com/google-maps-platform/
+
+を参考にMaps Javascript APIを有効化してください。これはサブスクリプションではなくて従課金性を使うのがおすすめです。
+また、これを取得するのは一人でかまいません。
+
+そしてこれをプロジェクトルートに`.env`というファイルを作りその中に以下のように書き込んでください。
+
+YOUR_API_KEYの箇所を変更してください。
+
+```env
+VITE_GOOGLE_MAPS_API_KEY=YOUR_API_KEY
+```
+
+4. 開発用エミュレータの起動とReactサーバーの起動
+
+まずpnpmを使用してreactのアプリが使うパッケージをインストールします。
+
+以下のコマンドを実行してください
+
+```sh
+pnpm install
+```
+
+そして、以下のコマンドを実行してサーバーとエミュレーターの起動を行ってください
+
+```sh
+mise dev
+```
+
+1. デプロイ
+
+デプロイは自動化することを推奨しますが一応可能です。
+
+以下のコマンドを実行してください。エラーが出る場合などがあると思いますがその時はひとつづつつぶしていってください。また、ここでは適切なfirebase.jsが設定されていることを前提とします。
+
+```sh
+firebase deploy
+```
