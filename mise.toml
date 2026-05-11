@@ -1,0 +1,15 @@
+[tools]
+firebase = "latest"
+java = "temurin-25"
+node = "24"
+pnpm = "latest"
+ 
+[tasks.emulator]
+run="firebase emulators:start"
+
+[tasks."dev:web"]
+run="pnpm dev"
+
+[tasks.dev]
+description="エミュレーターとreactサーバーを起動します"
+depends=["emulator","dev:web"]
