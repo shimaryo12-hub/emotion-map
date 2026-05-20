@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import {
   GoogleMap,
   LoadScript,
@@ -9,7 +9,7 @@ import { db } from "./firebase";
 import {
   collection,
   addDoc,
-  getDocs,
+  onSnapshot,
   query,
   orderBy,
 } from "firebase/firestore";
@@ -94,23 +94,18 @@ function App() {
     setTouchStart(null);
   };
 
-  // =============================
-  // データ取得（時間順）
-  // =============================
-  const fetchMarkers = async () => {
+  useEffect(() => {
     const q = query(
       collection(db, "emotions"),
-      orderBy("createdAt", "desc") // 最新順
+      orderBy("createdAt", "desc")
     );
 
-    const querySnapshot = await getDocs(q);
-    const data = querySnapshot.docs.map(doc => doc.data());
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const data = snapshot.docs.map((doc) => doc.data());
+      setMarkers(data);
+    });
 
-    setMarkers(data);
-  };
-
-  useEffect(() => {
-    fetchMarkers();
+    return () => unsubscribe();
   }, []);
 
   // =============================
@@ -143,7 +138,6 @@ function App() {
 
       setNewLocation(null);
       setText("");
-      fetchMarkers();
     } catch (error) {
       console.error("Submit failed", error);
       alert("投稿中にエラーが発生しました。もう一度お試しください。");
