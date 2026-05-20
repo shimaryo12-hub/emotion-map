@@ -27,10 +27,10 @@ const center = {
   lng: 135.7788,
 };
 
-const mapOptions = {
-  minZoom: 12,
-  maxZoom: 16,
-};
+// const mapOptions = {
+//   minZoom: 12,
+//   maxZoom: 16,
+// };
 
 // =============================
 // 感情と絵文字の対応
