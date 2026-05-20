@@ -1,0 +1,38 @@
+# これは、githubにより、自動で実行されるCIの設定ファイルです。
+# テストがあればテスト、ビルド、フォーマットなどを行い、コードの品質と動くことを保証します。
+
+name: CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - uses: pnpm/action-setup@v6
+        name: Install pnpm
+        with:
+          version: 11
+          cache: true
+
+      - name: Install dependencies
+        run: pnpm install
+      
+      - name: Run lint
+        run: pnpm lint --max-warnings=0
+      
+      - name: Run build
+        run: pnpm build
+
+  
