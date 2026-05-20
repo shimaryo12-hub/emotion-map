@@ -177,12 +177,15 @@ function App() {
   return (
     <LoadScript googleMapsApiKey={import.meta.env.VITE_GOOGLE_MAPS_API_KEY}>
       <GoogleMap
-        mapContainerStyle={containerStyle}
-        center={center}
-        zoom={13}
-        options={mapOptions}
-        onClick={handleMapClick}
-      >
+  mapContainerStyle={containerStyle}
+  center={center}
+  zoom={15}
+  onClick={handleMapClick}
+  options={{
+    fullscreenControl: false, // 最大化ボタンを消す
+  }}
+>
+  // REVIEW: 投稿する際に地図がズームアウトする
         {/* =============================
             Marker表示
         ============================= */}
@@ -348,17 +351,20 @@ function App() {
 
             {/* LINE風コメント */}
             <textarea
-              placeholder="感情の理由を入力してください"
-              value={text}
-              onChange={(e) => setText(e.target.value)}
-              style={{
-                width: "100%",
-                marginTop: "10px",
-                borderRadius: "10px",
-                padding: "8px",
-                border: "1px solid #ccc",
-              }}
-            />
+  placeholder="感情の理由を入力してください"
+  value={text}
+  onChange={(e) => setText(e.target.value)}
+  style={{
+    width: "100%",
+    marginTop: "10px",
+    borderRadius: "10px",
+    padding: "8px",
+    border: "1px solid #ccc",
+    fontSize: "16px", // ← スマホ拡大防止
+    resize: "none", // 任意：サイズ変更禁止
+    boxSizing: "border-box",
+  }}
+/>
 
             <button
               onClick={handleSubmit}
