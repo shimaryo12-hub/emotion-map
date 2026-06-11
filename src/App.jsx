@@ -171,21 +171,20 @@ function App() {
   return (
     <LoadScript googleMapsApiKey={import.meta.env.VITE_GOOGLE_MAPS_API_KEY}>
       <GoogleMap
-  mapContainerStyle={containerStyle}
-  center={center}
-  zoom={15}
-  onClick={handleMapClick}
-  options={{
-    fullscreenControl: false, // 最大化ボタンを消す
-  }}
->
+        mapContainerStyle={containerStyle}
+        center={center}
+        zoom={15}
+        onClick={handleMapClick}
+        options={{
+          fullscreenControl: false, // 最大化ボタンを消す
+        }}
+      >
         {/* 投稿する際に地図がズームアウトする */}
         {/* =============================
             Marker表示
         ============================= */}
         {filteredMarkers.map((m, i) => (
           <Marker
-      
             key={i}
             position={{ lat: m.lat, lng: m.lng }}
             label={{
@@ -380,13 +379,14 @@ function App() {
         )}
 
         {/* =============================
-            Instagramリンク（右下）
+            Instagramリンク（左下）
         ============================= */}
         <div
           style={{
             position: "absolute",
-            right: "16px",
-            bottom: "16px",
+            left: "16px",
+            bottom: newLocation ? "340px" : "16px",
+            transition: "bottom 0.2s ease",
             background: "rgba(255,255,255,0.95)",
             padding: "10px 14px",
             borderRadius: "20px",
