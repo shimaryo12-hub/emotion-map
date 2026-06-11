@@ -23,8 +23,8 @@ const containerStyle = {
 };
 
 const center = {
-  lat: 34.8193,
-  lng: 135.7788,
+  lat: 34.7339108,
+  lng: 135.8229556,
 };
 
 // const mapOptions = {
@@ -179,12 +179,13 @@ function App() {
     fullscreenControl: false, // 最大化ボタンを消す
   }}
 >
-  // REVIEW: 投稿する際に地図がズームアウトする
+        {/* 投稿する際に地図がズームアウトする */}
         {/* =============================
             Marker表示
         ============================= */}
         {filteredMarkers.map((m, i) => (
           <Marker
+      
             key={i}
             position={{ lat: m.lat, lng: m.lng }}
             label={{
