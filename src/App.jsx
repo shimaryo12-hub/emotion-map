@@ -5,7 +5,7 @@ import {
   Marker,
   InfoWindow,
 } from "@react-google-maps/api";
-import { db } from "./firebase";
+import { db, storage, auth } from "./firebase";
 import {
   collection,
   addDoc,
@@ -13,6 +13,8 @@ import {
   query,
   orderBy,
 } from "firebase/firestore";
+import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
+import { signInAnonymously } from "firebase/auth";
 
 // =============================
 // 地図コンテナ設定
@@ -59,6 +61,17 @@ function App() {
   const [newLocation, setNewLocation] = useState(null);
   const [emotion, setEmotion] = useState(emotionOptions[0].key);
   const [text, setText] = useState("");
+  const [imageFile, setImageFile] = useState(null);
+  const [imagePreview, setImagePreview] = useState(null);
+
+  // プレビューのオブジェクト URL を破棄
+  useEffect(() => {
+    return () => {
+      if (imagePreview) {
+        URL.revokeObjectURL(imagePreview);
+      }
+    };
+  }, [imagePreview]);
 
   // フィルター
   const [filter, setFilter] = useState("all");
@@ -95,6 +108,11 @@ function App() {
   };
 
   useEffect(() => {
+    signInAnonymously(auth).catch((error) => {
+      console.error("Anonymous auth failed", error);
+      alert("画像アップロードのための認証に失敗しました。開発者に確認してください。");
+    });
+
     const q = query(
       collection(db, "emotions"),
       orderBy("createdAt", "desc")
@@ -128,19 +146,35 @@ function App() {
     if (!newLocation) return;
 
     try {
+      let imageUrl = null;
+
+      if (imageFile) {
+        const imageRef = ref(
+          storage,
+          `emotion-images/${Date.now()}_${imageFile.name}`
+        );
+        const snapshot = await uploadBytes(imageRef, imageFile);
+        imageUrl = await getDownloadURL(snapshot.ref);
+      }
+
       await addDoc(collection(db, "emotions"), {
         lat: newLocation.lat,
         lng: newLocation.lng,
         emotion,
         text,
+        imageUrl,
         createdAt: new Date(),
       });
 
       setNewLocation(null);
       setText("");
+      setImageFile(null);
+      setImagePreview(null);
     } catch (error) {
       console.error("Submit failed", error);
-      alert("投稿中にエラーが発生しました。もう一度お試しください。");
+      alert(
+        `投稿中にエラーが発生しました。 ${error instanceof Error ? error.message : "再度お試しください。"}`
+      );
     }
   };
 
@@ -214,6 +248,22 @@ function App() {
                 {emojiMap[selected.emotion]}
               </div>
               <div>{selected.text || "（コメントなし）"}</div>
+              {selected.imageUrl && (
+                <div
+                  style={{
+                    marginTop: "10px",
+                    maxWidth: "200px",
+                    borderRadius: "10px",
+                    overflow: "hidden",
+                  }}
+                >
+                  <img
+                    src={selected.imageUrl}
+                    alt="投稿画像"
+                    style={{ width: "100%", display: "block" }}
+                  />
+                </div>
+              )}
             </div>
           </InfoWindow>
         )}
@@ -345,20 +395,60 @@ function App() {
 
             {/* LINE風コメント */}
             <textarea
-  placeholder="感情の理由を入力してください"
-  value={text}
-  onChange={(e) => setText(e.target.value)}
-  style={{
-    width: "100%",
-    marginTop: "10px",
-    borderRadius: "10px",
-    padding: "8px",
-    border: "1px solid #ccc",
-    fontSize: "16px", // ← スマホ拡大防止
-    resize: "none", // 任意：サイズ変更禁止
-    boxSizing: "border-box",
-  }}
-/>
+              placeholder="感情の理由を入力してください"
+              value={text}
+              onChange={(e) => setText(e.target.value)}
+              style={{
+                width: "100%",
+                marginTop: "10px",
+                borderRadius: "10px",
+                padding: "8px",
+                border: "1px solid #ccc",
+                fontSize: "16px", // ← スマホ拡大防止
+                resize: "none", // 任意：サイズ変更禁止
+                boxSizing: "border-box",
+              }}
+            />
+
+            <label
+              style={{
+                display: "block",
+                marginTop: "12px",
+                fontSize: "14px",
+                color: "#444",
+              }}
+            >
+              画像を選択（任意）
+            </label>
+            <input
+              type="file"
+              accept="image/*"
+              onChange={(e) => {
+                const file = e.target.files?.[0] || null;
+                setImageFile(file);
+                setImagePreview(file ? URL.createObjectURL(file) : null);
+              }}
+              style={{
+                width: "100%",
+                marginTop: "6px",
+              }}
+            />
+            {imagePreview && (
+              <div
+                style={{
+                  marginTop: "10px",
+                  borderRadius: "12px",
+                  overflow: "hidden",
+                  boxShadow: "0 2px 8px rgba(0,0,0,0.15)",
+                }}
+              >
+                <img
+                  src={imagePreview}
+                  alt="選択した画像プレビュー"
+                  style={{ width: "100%", display: "block" }}
+                />
+              </div>
+            )}
 
             <button
               onClick={handleSubmit}
