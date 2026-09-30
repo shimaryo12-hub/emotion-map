@@ -3,7 +3,7 @@ import { getFirestore } from "firebase/firestore";
 
 // Key
 const firebaseConfig = {
-  apiKey: "AIzaSyDBDZCrD-3NZ36j7zlj_SYmMeFgM1yAn84",
+  apiKey: "AIzaSyBP8ASvUKMZ1dbwr2AKdogCPkS2Jq2Yaqs",
   authDomain: "kannjo-map.firebaseapp.com",
   projectId: "kannjo-map",
   storageBucket: "kannjo-map.appspot.com",
