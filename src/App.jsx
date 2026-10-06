@@ -7,8 +7,8 @@ import {
 } from "@react-google-maps/api";
 import { db } from "./firebase";
 import {
-  collection,
   addDoc,
+  collection,
   onSnapshot,
   query,
   orderBy,
@@ -54,11 +54,16 @@ const instagramUrl = "https://www.instagram.com/kizugawa_virtual/";
 function App() {
   const [markers, setMarkers] = useState([]);
   const [selected, setSelected] = useState(null);
+  const [mapCenter, setMapCenter] = useState(center);
 
   // 投稿関連
   const [newLocation, setNewLocation] = useState(null);
   const [emotion, setEmotion] = useState(emotionOptions[0].key);
   const [text, setText] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState("");
+  const [isLocating, setIsLocating] = useState(false);
+  const [locationError, setLocationError] = useState("");
 
   // フィルター
   const [filter, setFilter] = useState("all");
@@ -101,7 +106,10 @@ function App() {
     );
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      const data = snapshot.docs.map((doc) => doc.data());
+      const data = snapshot.docs.map((emotionDoc) => ({
+        id: emotionDoc.id,
+        ...emotionDoc.data(),
+      }));
       setMarkers(data);
     });
 
@@ -112,6 +120,7 @@ function App() {
   // 地図クリック → 投稿開始
   // =============================
   const handleMapClick = (e) => {
+    if (!e.latLng) return;
     const lat = e.latLng.lat();
     const lng = e.latLng.lng();
 
@@ -119,14 +128,56 @@ function App() {
       lat,
       lng,
     });
+    setSubmitError("");
+    setLocationError("");
+  };
+
+  const handleUseCurrentLocation = () => {
+    if (!navigator.geolocation) {
+      setLocationError("このブラウザーでは位置情報を利用できません。");
+      return;
+    }
+
+    setIsLocating(true);
+    setLocationError("");
+    navigator.geolocation.getCurrentPosition(
+      ({ coords }) => {
+        const location = {
+          lat: coords.latitude,
+          lng: coords.longitude,
+        };
+        setMapCenter(location);
+        setNewLocation(location);
+        setSubmitError("");
+        setIsLocating(false);
+      },
+      (error) => {
+        const messageByCode = {
+          1: "位置情報の利用が許可されませんでした。ブラウザーの設定を確認してください。",
+          2: "現在地を取得できませんでした。位置情報を有効にして再度お試しください。",
+          3: "位置情報の取得がタイムアウトしました。再度お試しください。",
+        };
+        setLocationError(
+          messageByCode[error.code] ?? "位置情報の取得に失敗しました。"
+        );
+        setIsLocating(false);
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 15000,
+        maximumAge: 30000,
+      }
+    );
   };
 
   // =============================
   // 投稿処理
   // =============================
   const handleSubmit = async () => {
-    if (!newLocation) return;
+    if (!newLocation || isSubmitting) return;
 
+    setIsSubmitting(true);
+    setSubmitError("");
     try {
       await addDoc(collection(db, "emotions"), {
         lat: newLocation.lat,
@@ -140,7 +191,9 @@ function App() {
       setText("");
     } catch (error) {
       console.error("Submit failed", error);
-      alert("投稿中にエラーが発生しました。もう一度お試しください。");
+      setSubmitError("投稿中にエラーが発生しました。もう一度お試しください。");
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -172,20 +225,67 @@ function App() {
     <LoadScript googleMapsApiKey={import.meta.env.VITE_GOOGLE_MAPS_API_KEY}>
       <GoogleMap
         mapContainerStyle={containerStyle}
-        center={center}
+        center={mapCenter}
         zoom={15}
         onClick={handleMapClick}
         options={{
           fullscreenControl: false, // 最大化ボタンを消す
         }}
       >
+        <div
+          onClick={(event) => event.stopPropagation()}
+          style={{
+            position: "absolute",
+            top: "54px",
+            right: "10px",
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "flex-end",
+            gap: "6px",
+            maxWidth: "min(90vw, 360px)",
+          }}
+        >
+          <button
+            type="button"
+            onClick={handleUseCurrentLocation}
+            disabled={isLocating}
+            aria-busy={isLocating}
+            style={{
+              background: "white",
+              border: "none",
+              borderRadius: "20px",
+              padding: "10px 14px",
+              boxShadow: "0 2px 8px rgba(0,0,0,0.2)",
+              cursor: isLocating ? "wait" : "pointer",
+              whiteSpace: "nowrap",
+            }}
+          >
+            {isLocating ? "現在地を取得中..." : "📍 現在地から投稿"}
+          </button>
+          {locationError && (
+            <div
+              role="alert"
+              style={{
+                padding: "8px 12px",
+                borderRadius: "10px",
+                background: "white",
+                color: "#c62828",
+                boxShadow: "0 2px 8px rgba(0,0,0,0.2)",
+                fontSize: "13px",
+              }}
+            >
+              {locationError}
+            </div>
+          )}
+        </div>
+
         {/* 投稿する際に地図がズームアウトする */}
         {/* =============================
             Marker表示
         ============================= */}
         {filteredMarkers.map((m, i) => (
           <Marker
-            key={i}
+            key={m.id ?? i}
             position={{ lat: m.lat, lng: m.lng }}
             label={{
               text: emojiMap[m.emotion],
@@ -347,6 +447,7 @@ function App() {
             <textarea
               placeholder="感情の理由を入力してください"
               value={text}
+              maxLength={500}
               onChange={(e) => setText(e.target.value)}
               style={{
                 width: "100%",
@@ -360,20 +461,28 @@ function App() {
               }}
             />
 
+            {submitError && (
+              <div role="alert" style={{ marginTop: "8px", color: "#c62828" }}>
+                {submitError}
+              </div>
+            )}
+
             <button
               onClick={handleSubmit}
+              disabled={isSubmitting}
+              aria-busy={isSubmitting}
               style={{
                 marginTop: "10px",
                 width: "100%",
-                background: "#00c853",
+                background: isSubmitting ? "#8a8a8a" : "#00c853",
                 color: "white",
                 border: "none",
                 padding: "10px",
                 borderRadius: "10px",
-                cursor: "pointer",
+                cursor: isSubmitting ? "wait" : "pointer",
               }}
             >
-              投稿する
+              {isSubmitting ? "投稿中..." : "投稿する"}
             </button>
           </div>
         )}
