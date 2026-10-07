@@ -34,7 +34,7 @@ mise install
 
 開発のみであればエミュレーターを使用して行えるので問題ないですが、firebaseのセットアップ方法を書いておきます
 
-ここではすでにFirebaseプロジェクトを作成し、Cloud Firestoreを有効化しているのを前提とします。
+ここではすでにFirebaseプロジェクトを作成し、Cloud FirestoreとCloud Storageを有効化しているのを前提とします。
 
 以下のコマンドでfirebaseへのcliでのログインを行えます。
 
@@ -44,6 +44,7 @@ firebase login
 
 そして、以下のコマンドを使うことであなたのFirebaseプロジェクトとこのプロジェクトを紐づけることができます。
 プロジェクトを変更する場合は`src/firebase.js`の設定も更新してください。
+写真投稿を利用するにはCloud Storageの初期設定を完了し、`storage.rules`もデプロイしてください。
 
 ```sh
 firebase use --add

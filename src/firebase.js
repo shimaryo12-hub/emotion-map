@@ -1,5 +1,6 @@
 import { initializeApp } from "firebase/app";
 import { connectFirestoreEmulator, getFirestore } from "firebase/firestore";
+import { connectStorageEmulator, getStorage } from "firebase/storage";
 
 // Key
 const firebaseConfig = {
@@ -17,7 +18,9 @@ const app = initializeApp(firebaseConfig);
 
 // Firestoreを使えるようにする
 export const db = getFirestore(app);
+export const storage = getStorage(app);
 
 if (import.meta.env.DEV && import.meta.env.VITE_USE_FIREBASE_EMULATORS === "true") {
   connectFirestoreEmulator(db, "127.0.0.1", 8081);
+  connectStorageEmulator(storage, "127.0.0.1", 9199);
 }

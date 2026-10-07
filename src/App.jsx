@@ -5,7 +5,7 @@ import {
   Marker,
   InfoWindow,
 } from "@react-google-maps/api";
-import { db } from "./firebase";
+import { db, storage } from "./firebase";
 import {
   addDoc,
   collection,
@@ -13,6 +13,7 @@ import {
   query,
   orderBy,
 } from "firebase/firestore";
+import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
 
 // =============================
 // 地図コンテナ設定
@@ -50,6 +51,69 @@ const emojiMap = emotionOptions.reduce((map, item) => {
 }, {});
 
 const instagramUrl = "https://www.instagram.com/kizugawa_virtual/";
+const maxPhotoSize = 5 * 1024 * 1024;
+const maxOriginalPhotoSize = 20 * 1024 * 1024;
+const allowedPhotoTypes = ["image/jpeg", "image/png", "image/webp", "image/gif"];
+
+const compressPhoto = async (file) => {
+  if (file.type === "image/gif") return file;
+
+  const image = await createImageBitmap(file);
+  try {
+    const maxDimension = 1600;
+    const scale = Math.min(1, maxDimension / Math.max(image.width, image.height));
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.round(image.width * scale);
+    canvas.height = Math.round(image.height * scale);
+
+    const context = canvas.getContext("2d");
+    if (!context) throw new Error("Photo compression is not supported.");
+    context.drawImage(image, 0, 0, canvas.width, canvas.height);
+
+    const toWebp = (quality) =>
+      new Promise((resolve, reject) => {
+        canvas.toBlob(
+          (blob) =>
+            blob
+              ? resolve(blob)
+              : reject(new Error("Photo compression failed.")),
+          "image/webp",
+          quality
+        );
+      });
+
+    let compressed = await toWebp(0.82);
+    if (compressed.size > maxPhotoSize) compressed = await toWebp(0.65);
+    if (compressed.size > maxPhotoSize) {
+      const reducedCanvas = document.createElement("canvas");
+      reducedCanvas.width = Math.round(canvas.width * 0.75);
+      reducedCanvas.height = Math.round(canvas.height * 0.75);
+      const reducedContext = reducedCanvas.getContext("2d");
+      if (!reducedContext) throw new Error("Photo compression is not supported.");
+      reducedContext.drawImage(
+        canvas,
+        0,
+        0,
+        reducedCanvas.width,
+        reducedCanvas.height
+      );
+      compressed = await new Promise((resolve, reject) => {
+        reducedCanvas.toBlob(
+          (blob) =>
+            blob
+              ? resolve(blob)
+              : reject(new Error("Photo compression failed.")),
+          "image/webp",
+          0.65
+        );
+      });
+    }
+
+    return compressed;
+  } finally {
+    image.close();
+  }
+};
 
 function App() {
   const [markers, setMarkers] = useState([]);
@@ -60,10 +124,19 @@ function App() {
   const [newLocation, setNewLocation] = useState(null);
   const [emotion, setEmotion] = useState(emotionOptions[0].key);
   const [text, setText] = useState("");
+  const [photo, setPhoto] = useState(null);
+  const [isPreparingPhoto, setIsPreparingPhoto] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitStage, setSubmitStage] = useState("");
   const [submitError, setSubmitError] = useState("");
   const [isLocating, setIsLocating] = useState(false);
   const [locationError, setLocationError] = useState("");
+
+  useEffect(() => {
+    return () => {
+      if (photo?.previewUrl) URL.revokeObjectURL(photo.previewUrl);
+    };
+  }, [photo]);
 
   // フィルター
   const [filter, setFilter] = useState("all");
@@ -178,22 +251,92 @@ function App() {
 
     setIsSubmitting(true);
     setSubmitError("");
+    let failureStage = photo ? "写真のアップロード" : "投稿の保存";
+    setSubmitStage(photo ? "写真をアップロード中..." : "投稿を保存中...");
     try {
+      let photoUrl = "";
+      if (photo) {
+        const photoRef = ref(storage, `emotions/${crypto.randomUUID()}`);
+        const uploadedPhoto = await uploadBytes(photoRef, photo.file, {
+          contentType: photo.file.type,
+        });
+        photoUrl = await getDownloadURL(uploadedPhoto.ref);
+      }
+
+      failureStage = "投稿の保存";
+      setSubmitStage("投稿を保存中...");
       await addDoc(collection(db, "emotions"), {
         lat: newLocation.lat,
         lng: newLocation.lng,
         emotion,
         text,
+        ...(photoUrl && { photoUrl }),
         createdAt: new Date(),
       });
 
       setNewLocation(null);
       setText("");
+      setPhoto(null);
     } catch (error) {
       console.error("Submit failed", error);
-      setSubmitError("投稿中にエラーが発生しました。もう一度お試しください。");
+      const errorMessages = {
+        "storage/unauthorized":
+          "写真のアップロードが許可されませんでした。Storageルールが反映されているか確認してください。",
+        "storage/bucket-not-found":
+          "Firebase Storageのバケットが見つかりません。src/firebase.jsのstorageBucket設定を確認してください。",
+        "storage/canceled": "写真のアップロードがキャンセルされました。",
+        "permission-denied":
+          "投稿の保存が許可されませんでした。Firestoreルールを確認してください。",
+        "storage/retry-limit-exceeded":
+          "写真のアップロードがタイムアウトしました。通信状態を確認して再度お試しください。",
+        "storage/unknown":
+          "写真をアップロードできませんでした。Firebase Storageの設定と通信状態を確認してください。",
+      };
+      const code = error?.code ?? "unknown";
+      setSubmitError(
+        errorMessages[code] ??
+          `${failureStage}に失敗しました（${code}）。通信状態とFirebaseの設定を確認して再度お試しください。`
+      );
     } finally {
       setIsSubmitting(false);
+      setSubmitStage("");
+    }
+  };
+
+  const handlePhotoChange = async (event) => {
+    const selectedPhoto = event.target.files?.[0];
+    event.target.value = "";
+    if (!selectedPhoto) return;
+
+    if (!allowedPhotoTypes.includes(selectedPhoto.type)) {
+      setSubmitError("JPEG、PNG、WebP、GIF形式の写真を選択してください。");
+      return;
+    }
+    if (selectedPhoto.size > maxOriginalPhotoSize) {
+      setSubmitError("写真は20MB以下のファイルを選択してください。");
+      return;
+    }
+
+    setSubmitError("");
+    setPhoto(null);
+    setIsPreparingPhoto(true);
+    try {
+      const compressedPhoto = await compressPhoto(selectedPhoto);
+      if (compressedPhoto.size > maxPhotoSize) {
+        setSubmitError(
+          "写真を5MB以下に圧縮できませんでした。小さい写真を選択してください。"
+        );
+        return;
+      }
+      setPhoto({
+        file: compressedPhoto,
+        previewUrl: URL.createObjectURL(compressedPhoto),
+      });
+    } catch (error) {
+      console.error("Photo compression failed", error);
+      setSubmitError("写真を準備できませんでした。別の写真をお試しください。");
+    } finally {
+      setIsPreparingPhoto(false);
     }
   };
 
@@ -314,6 +457,20 @@ function App() {
                 {emojiMap[selected.emotion]}
               </div>
               <div>{selected.text || "（コメントなし）"}</div>
+              {selected.photoUrl && (
+                <img
+                  src={selected.photoUrl}
+                  alt="投稿に添付された写真"
+                  style={{
+                    display: "block",
+                    maxWidth: "240px",
+                    maxHeight: "180px",
+                    marginTop: "8px",
+                    borderRadius: "8px",
+                    objectFit: "cover",
+                  }}
+                />
+              )}
             </div>
           </InfoWindow>
         )}
@@ -461,6 +618,79 @@ function App() {
               }}
             />
 
+            {photo?.previewUrl && (
+              <div style={{ position: "relative", marginTop: "8px" }}>
+                <img
+                  src={photo.previewUrl}
+                  alt="添付する写真のプレビュー"
+                  style={{
+                    display: "block",
+                    maxWidth: "100%",
+                    maxHeight: "160px",
+                    borderRadius: "8px",
+                    objectFit: "cover",
+                  }}
+                />
+                <button
+                  type="button"
+                  onClick={() => setPhoto(null)}
+                  aria-label="写真を取り消す"
+                  style={{
+                    position: "absolute",
+                    top: "6px",
+                    right: "6px",
+                    width: "28px",
+                    height: "28px",
+                    border: "none",
+                    borderRadius: "50%",
+                    background: "rgba(0,0,0,0.65)",
+                    color: "white",
+                    cursor: "pointer",
+                    fontSize: "18px",
+                  }}
+                >
+                  ×
+                </button>
+              </div>
+            )}
+
+            <label
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "6px",
+                marginTop: "8px",
+                padding: "7px 10px",
+                border: "1px solid #ccc",
+                borderRadius: "8px",
+                cursor: "pointer",
+                fontSize: "14px",
+              }}
+            >
+              {isPreparingPhoto ? "写真を準備中..." : "📷 写真を追加"}
+              <input
+                type="file"
+                accept={allowedPhotoTypes.join(",")}
+                onChange={handlePhotoChange}
+                disabled={isPreparingPhoto || isSubmitting}
+                aria-label="投稿に添付する写真を選択"
+                style={{
+                  position: "absolute",
+                  width: "1px",
+                  height: "1px",
+                  padding: 0,
+                  margin: "-1px",
+                  overflow: "hidden",
+                  clip: "rect(0, 0, 0, 0)",
+                  whiteSpace: "nowrap",
+                  border: 0,
+                }}
+              />
+            </label>
+            <span style={{ marginLeft: "8px", color: "#777", fontSize: "12px" }}>
+              20MBまで・写真は自動圧縮
+            </span>
+
             {submitError && (
               <div role="alert" style={{ marginTop: "8px", color: "#c62828" }}>
                 {submitError}
@@ -469,20 +699,26 @@ function App() {
 
             <button
               onClick={handleSubmit}
-              disabled={isSubmitting}
-              aria-busy={isSubmitting}
+              disabled={isSubmitting || isPreparingPhoto}
+              aria-busy={isSubmitting || isPreparingPhoto}
               style={{
                 marginTop: "10px",
                 width: "100%",
-                background: isSubmitting ? "#8a8a8a" : "#00c853",
+                background:
+                  isSubmitting || isPreparingPhoto ? "#8a8a8a" : "#00c853",
                 color: "white",
                 border: "none",
                 padding: "10px",
                 borderRadius: "10px",
-                cursor: isSubmitting ? "wait" : "pointer",
+                cursor:
+                  isSubmitting || isPreparingPhoto ? "wait" : "pointer",
               }}
             >
-              {isSubmitting ? "投稿中..." : "投稿する"}
+              {isPreparingPhoto
+                ? "写真を準備中..."
+                : isSubmitting
+                  ? submitStage || "投稿中..."
+                  : "投稿する"}
             </button>
           </div>
         )}
